@@ -1,60 +1,69 @@
+import re
 import requests
 from bs4 import BeautifulSoup
-import json
-import certifi
-from urllib.parse import urljoin
+import textwrap
 
-requests.packages.urllib3.disable_warnings()
-verify_ssl = False
-
-
-
-def get_subpage_links(url):
-    response = requests.get(url, verify=False)  # Add verify=False to bypass SSL certificate verification
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        # Modify the selector to find the links to sub-pages or documents
-        subpage_links = [link['href'] for link in soup.find_all('a', href=True)]  # Update the selector
-        return subpage_links
-    else:
-        print(f"Failed to fetch the page: {url}")
-        return []
-
-def scrape_subpage_content(url):
+def ExtractTextFromWebpage(url):
     response = requests.get(url)
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, 'html.parser')
-        # Modify the selector to find the content on the sub-pages or documents
-        subpage_content = soup.find('div', {'class': 'your-subpage-class'})  # Update the selector
-        if subpage_content:
-            subpage_text = subpage_content.get_text(separator='\n').strip()
-            return subpage_text
-        else:
-            print(f"Subpage content not found on the page: {url}")
-            return None
-    else:
-        print(f"Failed to fetch the subpage: {url}")
-        return None
+    html_page = BeautifulSoup(response.text, "html.parser")
+    all_words = set()  # Use a set to store unique words
 
+    for element in html_page.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'li']):
+        text = element.get_text().strip()
+        if text:
+            text = re.sub(r'[^\w\s]', '', text)
+            text = text.lower()
+            words = text.split()
 
+            for word in words:
+                all_words.add(word)  # Add each word to the set
 
-# ... other functions ...
+    return ' '.join(all_words)  # Join unique words back into a string
 
-if __name__ == "__main__":
-    product_url = 'https://www.ciena.com/products/converged-packet-optical'
-    subpage_links = get_subpage_links(product_url)
+def GetAllPage(url, visited_urls=None):
+    if visited_urls is None:
+        visited_urls = set()
 
-    # Remove duplicate URLs using set()
-    unique_subpage_links = set(subpage_links)
+    internal_urls = set()
+    external_urls = set()
 
-    all_subpage_content = {}
+    response = requests.get(url)
+    html_page = BeautifulSoup(response.text, "html.parser")
 
-    for link in unique_subpage_links:
-        full_link = urljoin(product_url, link)
-        subpage_content = scrape_subpage_content(full_link)
-        if subpage_content:
-            all_subpage_content[full_link] = subpage_content
+    all_urls = html_page.findAll("a")
 
-    # Save to JSON file
-    with open('product_content.json', 'w') as json_file:
-        json.dump(all_subpage_content, json_file, indent=4)
+    for link in all_urls:
+        href = link.get('href')
+        if href:
+            if href not in visited_urls:
+                visited_urls.add(href)
+                if "www.ciena.com/products/" in href:
+                    internal_urls.add(href)
+                else:
+                    external_urls.add(href)
+    return internal_urls, external_urls
+
+url = "https://www.ciena.com/products/converged-packet-optical/"
+internal_urls, external_urls = GetAllPage(url)
+
+print("Internal URLs:")
+for link in internal_urls:
+    print(link)
+
+print("\nExternal URLs:")
+for link in external_urls:
+    print(link)
+
+# Extract text related to "converged-packet-optical" from the provided URL
+extracted_texts = []
+for url in internal_urls:
+    extracted_text = ExtractTextFromWebpage(url)
+    extracted_texts.append(extracted_text)
+
+print("\nExtracted Texts:")
+for i, text in enumerate(extracted_texts, 1):
+    print(f"Text {i}:")
+    for line in textwrap.wrap(text, width=80):
+        print(line)
+    print()
+print('done')
